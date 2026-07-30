@@ -1,5 +1,7 @@
 package com.sudesh.ledger.command.api.dto;
 
-public class DepositRequest {
+import java.math.BigDecimal;
+
+public record DepositRequest(BigDecimal amount, String reference) {
   
 }
