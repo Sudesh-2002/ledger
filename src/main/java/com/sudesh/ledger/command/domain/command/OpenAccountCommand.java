@@ -1,5 +1,5 @@
 package com.sudesh.ledger.command.domain.command;
 
-public class OpenAccountCommand {
+public record OpenAccountCommand(String accountId, String ownerName, java.math.BigDecimal openingBalance) {
   
 }
