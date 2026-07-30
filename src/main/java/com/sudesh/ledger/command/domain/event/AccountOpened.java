@@ -1,5 +1,5 @@
 package com.sudesh.ledger.command.domain.event;
 
-public class AccountOpened {
+public record AccountOpened(String accountId, String ownerName, java.math.BigDecimal openingBalance) {
   
 }

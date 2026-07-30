@@ -1,5 +1,5 @@
 package com.sudesh.ledger.command.domain.event;
 
-public class MoneyDeposited {
+public record MoneyDeposited(String accountId, java.math.BigDecimal amount, String reference) {
   
 }

@@ -1,5 +1,3 @@
 package com.sudesh.ledger.command.domain;
 
-public class AccountStatus {
-  
-}
+public enum AccountStatus { OPEN, CLOSED }

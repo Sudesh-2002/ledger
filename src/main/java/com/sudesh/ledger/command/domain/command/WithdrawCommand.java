@@ -1,5 +1,5 @@
 package com.sudesh.ledger.command.domain.command;
 
-public class WithdrawCommand {
+public record WithdrawCommand(String accountId, java.math.BigDecimal amount, String reference) {
   
 }
