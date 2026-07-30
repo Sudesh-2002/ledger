@@ -1,5 +1,7 @@
 package com.sudesh.ledger.command.api.dto;
 
-public class WithdrawRequest {
+import java.math.BigDecimal;
+
+public record WithdrawRequest(BigDecimal amount, String reference) {
   
 }

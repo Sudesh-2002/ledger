@@ -1,5 +1,7 @@
 package com.sudesh.ledger.command.api.dto;
 
-public class OpenAccountRequest {
+import java.math.BigDecimal;
+
+public record OpenAccountRequest(String accountId, String ownerName, BigDecimal openingBalance) {
   
 }
