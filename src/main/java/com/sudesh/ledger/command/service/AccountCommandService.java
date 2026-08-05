@@ -1,16 +1,15 @@
 package com.sudesh.ledger.command.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sudesh.ledger.command.domain.Account;
+import com.sudesh.ledger.command.domain.AccountEventCodec;
 import com.sudesh.ledger.command.domain.command.DepositCommand;
 import com.sudesh.ledger.command.domain.command.OpenAccountCommand;
 import com.sudesh.ledger.command.domain.command.WithdrawCommand;
-import com.sudesh.ledger.command.domain.event.AccountOpened;
-import com.sudesh.ledger.command.domain.event.MoneyDeposited;
-import com.sudesh.ledger.command.domain.event.MoneyWithdrawn;
 import com.sudesh.ledger.command.domain.exception.AccountNotFoundException;
 import com.sudesh.ledger.eventstore.EventStore;
 import com.sudesh.ledger.eventstore.StoredEvent;
+import com.sudesh.ledger.shared.event.DomainEventEnvelope;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -19,29 +18,41 @@ import java.util.List;
 public class AccountCommandService {
 
     private final EventStore eventStore;
-    private final ObjectMapper objectMapper;
+    private final AccountEventCodec codec;
+    private final ApplicationEventPublisher publisher;
     private static final String AGGREGATE_TYPE = "Account";
 
-    public AccountCommandService(EventStore eventStore, ObjectMapper objectMapper) {
+    public AccountCommandService(EventStore eventStore, AccountEventCodec codec,
+                                  ApplicationEventPublisher publisher) {
         this.eventStore = eventStore;
-        this.objectMapper = objectMapper;
+        this.codec = codec;
+        this.publisher = publisher;
     }
 
     public void openAccount(OpenAccountCommand command) {
         Account account = Account.open(command);
-        eventStore.append(command.accountId(), AGGREGATE_TYPE, 0, account.getPendingEvents());
+        appendAndPublish(command.accountId(), 0, account.getPendingEvents());
     }
 
     public void deposit(DepositCommand command) {
         Account account = loadAccount(command.accountId());
         account.deposit(command);
-        eventStore.append(command.accountId(), AGGREGATE_TYPE, account.getVersion(), account.getPendingEvents());
+        appendAndPublish(command.accountId(), account.getVersion(), account.getPendingEvents());
     }
 
     public void withdraw(WithdrawCommand command) {
         Account account = loadAccount(command.accountId());
         account.withdraw(command);
-        eventStore.append(command.accountId(), AGGREGATE_TYPE, account.getVersion(), account.getPendingEvents());
+        appendAndPublish(command.accountId(), account.getVersion(), account.getPendingEvents());
+    }
+
+    private void appendAndPublish(String accountId, long baseVersion, List<Object> events) {
+        eventStore.append(accountId, AGGREGATE_TYPE, baseVersion, events);
+        long sequence = baseVersion + 1;
+        for (Object event : events) {
+            publisher.publishEvent(new DomainEventEnvelope(accountId, sequence, event));
+            sequence++;
+        }
     }
 
     private Account loadAccount(String accountId) {
@@ -49,21 +60,7 @@ public class AccountCommandService {
         if (stored.isEmpty()) {
             throw new AccountNotFoundException(accountId);
         }
-        List<Object> history = stored.stream().map(this::deserialize).toList();
+        List<Object> history = stored.stream().map(codec::toDomainEvent).toList();
         return Account.replay(history);
-    }
-
-    private Object deserialize(StoredEvent stored) {
-        try {
-            Class<?> type = switch (stored.getEventType()) {
-                case "AccountOpened" -> AccountOpened.class;
-                case "MoneyDeposited" -> MoneyDeposited.class;
-                case "MoneyWithdrawn" -> MoneyWithdrawn.class;
-                default -> throw new IllegalArgumentException("Unknown event type: " + stored.getEventType());
-            };
-            return objectMapper.readValue(stored.getPayload(), type);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to deserialize event", e);
-        }
     }
 }

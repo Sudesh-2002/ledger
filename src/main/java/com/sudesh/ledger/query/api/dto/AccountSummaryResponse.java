@@ -1,5 +1,5 @@
 package com.sudesh.ledger.query.api.dto;
 
-public class AccountSummaryResponse {
-  
-}
+import java.math.BigDecimal;
+
+public record AccountSummaryResponse(String accountId, String ownerName, BigDecimal balance, String status) {}
