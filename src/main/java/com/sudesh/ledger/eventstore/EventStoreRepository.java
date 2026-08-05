@@ -6,6 +6,7 @@ import java.util.List;
 public interface EventStoreRepository extends JpaRepository<StoredEvent, Long> {
 
     List<StoredEvent> findByAggregateIdOrderBySequenceNumberAsc(String aggregateId);
+    List<StoredEvent> findAllByOrderByAggregateIdAscSequenceNumberAsc();
 
     long countByAggregateId(String aggregateId);
 }
