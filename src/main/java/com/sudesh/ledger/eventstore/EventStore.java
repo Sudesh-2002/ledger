@@ -43,6 +43,11 @@ public class EventStore {
         return repository.findByAggregateIdOrderBySequenceNumberAsc(aggregateId);
     }
 
+    public List<StoredEvent> loadEventsAfter(String aggregateId, long afterVersion) {
+        return repository.findByAggregateIdAndSequenceNumberGreaterThanOrderBySequenceNumberAsc(
+                aggregateId, afterVersion);
+    }
+
     public long currentVersion(String aggregateId) {
         return repository.countByAggregateId(aggregateId);
     }
