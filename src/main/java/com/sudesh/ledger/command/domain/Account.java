@@ -7,6 +7,7 @@ import com.sudesh.ledger.command.domain.event.AccountOpened;
 import com.sudesh.ledger.command.domain.event.MoneyDeposited;
 import com.sudesh.ledger.command.domain.event.MoneyWithdrawn;
 import com.sudesh.ledger.command.domain.exception.InsufficientFundsException;
+import com.sudesh.ledger.eventstore.AccountSnapshot;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -91,6 +92,25 @@ public class Account {
             default -> throw new IllegalArgumentException(
                     "Unknown event type: " + event.getClass());
         }
+    }
+
+    public static Account restoreFromSnapshot(AccountSnapshot snapshot, List<Object> eventsSinceSnapshot) {
+        Account account = new Account();
+        account.accountId = snapshot.getAggregateId();
+        account.ownerName = snapshot.getOwnerName();
+        account.balance = snapshot.getBalance();
+        account.status = AccountStatus.valueOf(snapshot.getStatus());
+        account.version = snapshot.getVersion();
+
+        for (Object event : eventsSinceSnapshot) {
+            account.apply(event);
+            account.version++;
+        }
+        return account;
+    }
+
+    public AccountSnapshot toSnapshot() {
+        return new AccountSnapshot(accountId, version, ownerName, balance, status.name());
     }
 
     public List<Object> getPendingEvents() { return List.copyOf(pendingEvents); }
