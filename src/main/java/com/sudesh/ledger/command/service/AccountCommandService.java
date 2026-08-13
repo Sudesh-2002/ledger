@@ -7,13 +7,16 @@ import com.sudesh.ledger.command.domain.command.DepositCommand;
 import com.sudesh.ledger.command.domain.command.OpenAccountCommand;
 import com.sudesh.ledger.command.domain.command.WithdrawCommand;
 import com.sudesh.ledger.command.domain.exception.AccountNotFoundException;
+import com.sudesh.ledger.eventstore.AccountSnapshot;
 import com.sudesh.ledger.eventstore.EventStore;
+import com.sudesh.ledger.eventstore.SnapshotStore;
 import com.sudesh.ledger.eventstore.StoredEvent;
 import com.sudesh.ledger.shared.event.DomainEventEnvelope;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Optional;
 
 import static com.sudesh.ledger.config.KafkaTopicConfig.ACCOUNT_EVENTS_TOPIC;
 
@@ -21,15 +24,18 @@ import static com.sudesh.ledger.config.KafkaTopicConfig.ACCOUNT_EVENTS_TOPIC;
 public class AccountCommandService {
 
     private final EventStore eventStore;
+    private final SnapshotStore snapshotStore;
     private final AccountEventCodec codec;
     private final KafkaTemplate<String, DomainEventEnvelope> kafkaTemplate;
     private final ObjectMapper objectMapper;
     private static final String AGGREGATE_TYPE = "Account";
 
-    public AccountCommandService(EventStore eventStore, AccountEventCodec codec,
+    public AccountCommandService(EventStore eventStore, SnapshotStore snapshotStore,
+                                  AccountEventCodec codec,
                                   KafkaTemplate<String, DomainEventEnvelope> kafkaTemplate,
                                   ObjectMapper objectMapper) {
         this.eventStore = eventStore;
+        this.snapshotStore = snapshotStore;
         this.codec = codec;
         this.kafkaTemplate = kafkaTemplate;
         this.objectMapper = objectMapper;
@@ -38,18 +44,21 @@ public class AccountCommandService {
     public void openAccount(OpenAccountCommand command) {
         Account account = Account.open(command);
         appendAndPublish(command.accountId(), 0, account.getPendingEvents());
+        maybeSnapshot(account);
     }
 
     public void deposit(DepositCommand command) {
         Account account = loadAccount(command.accountId());
         account.deposit(command);
         appendAndPublish(command.accountId(), account.getVersion(), account.getPendingEvents());
+        maybeSnapshot(account);
     }
 
     public void withdraw(WithdrawCommand command) {
         Account account = loadAccount(command.accountId());
         account.withdraw(command);
         appendAndPublish(command.accountId(), account.getVersion(), account.getPendingEvents());
+        maybeSnapshot(account);
     }
 
     private void appendAndPublish(String accountId, long baseVersion, List<Object> events) {
@@ -74,11 +83,23 @@ public class AccountCommandService {
     }
 
     private Account loadAccount(String accountId) {
+        Optional<AccountSnapshot> snapshot = snapshotStore.loadLatest(accountId);
+
+        if (snapshot.isPresent()) {
+            List<StoredEvent> stored = eventStore.loadEventsAfter(accountId, snapshot.get().getVersion());
+            List<Object> events = stored.stream().map(codec::toDomainEvent).toList();
+            return Account.restoreFromSnapshot(snapshot.get(), events);
+        }
+
         List<StoredEvent> stored = eventStore.loadEvents(accountId);
         if (stored.isEmpty()) {
             throw new AccountNotFoundException(accountId);
         }
-        List<Object> history = stored.stream().map(codec::toDomainEvent).toList();
-        return Account.replay(history);
+        List<Object> events = stored.stream().map(codec::toDomainEvent).toList();
+        return Account.replay(events);
+    }
+
+    private void maybeSnapshot(Account account) {
+        snapshotStore.saveIfDue(account.getAccountId(), account.getVersion(), account.toSnapshot());
     }
 }
