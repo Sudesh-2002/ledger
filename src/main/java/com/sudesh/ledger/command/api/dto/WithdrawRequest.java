@@ -1,7 +1,10 @@
 package com.sudesh.ledger.command.api.dto;
 
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
 
-public record WithdrawRequest(BigDecimal amount, String reference) {
-  
-}
+public record WithdrawRequest(
+        @NotNull @DecimalMin(value = "0.01") BigDecimal amount,
+        String reference
+) {}
