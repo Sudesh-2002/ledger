@@ -12,10 +12,13 @@ import java.util.List;
 public class EventStore {
 
     private final EventStoreRepository repository;
+    private final OutboxRepository outboxRepository;
     private final ObjectMapper objectMapper;
 
-    public EventStore(EventStoreRepository repository, ObjectMapper objectMapper) {
+    public EventStore(EventStoreRepository repository, OutboxRepository outboxRepository,
+                       ObjectMapper objectMapper) {
         this.repository = repository;
+        this.outboxRepository = outboxRepository;
         this.objectMapper = objectMapper;
     }
 
@@ -26,10 +29,15 @@ public class EventStore {
         try {
             for (Object event : newEvents) {
                 String payload = objectMapper.writeValueAsString(event);
+                String eventType = event.getClass().getSimpleName();
+
                 StoredEvent stored = new StoredEvent(
-                        aggregateId, aggregateType, nextSequence,
-                        event.getClass().getSimpleName(), payload);
+                        aggregateId, aggregateType, nextSequence, eventType, payload);
                 repository.saveAndFlush(stored);
+
+                // same transaction, same DB — this is what makes it atomic with the event write
+                outboxRepository.save(new OutboxEntry(aggregateId, nextSequence, eventType, payload));
+
                 nextSequence++;
             }
         } catch (DataIntegrityViolationException e) {
