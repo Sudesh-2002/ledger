@@ -21,6 +21,8 @@ public class OutboxEntry {
     private String payload;
 
     private boolean published = false;
+    private int retryCount = 0;
+    private boolean deadLettered = false;
 
     protected OutboxEntry() {}
 
@@ -38,4 +40,8 @@ public class OutboxEntry {
     public String getPayload() { return payload; }
     public boolean isPublished() { return published; }
     public void markPublished() { this.published = true; }
+    public int getRetryCount() { return retryCount; }
+    public void incrementRetryCount() { this.retryCount++; }
+    public boolean isDeadLettered() { return deadLettered; }
+    public void markDeadLettered() { this.deadLettered = true; }
 }
