@@ -13,6 +13,7 @@ public class LedgerMetrics {
     private final Counter commandsProcessed;
     private final Counter commandsRejected;
     private final Counter outboxPublished;
+    private final Counter outboxDeadLettered;
     private final AtomicInteger outboxBacklog = new AtomicInteger(0);
     private final Timer commandLatency;
 
@@ -23,6 +24,8 @@ public class LedgerMetrics {
                 .description("Total commands rejected by domain rules").register(registry);
         this.outboxPublished = Counter.builder("ledger.outbox.published")
                 .description("Total outbox entries published to Kafka").register(registry);
+        this.outboxDeadLettered = Counter.builder("ledger.outbox.dead_lettered")
+                .description("Outbox entries that exhausted retries and were dead-lettered").register(registry);
         this.commandLatency = Timer.builder("ledger.command.latency")
                 .description("Time to process a command end-to-end").register(registry);
         registry.gauge("ledger.outbox.backlog", outboxBacklog);
@@ -31,6 +34,7 @@ public class LedgerMetrics {
     public void recordCommandProcessed() { commandsProcessed.increment(); }
     public void recordCommandRejected() { commandsRejected.increment(); }
     public void recordOutboxPublish() { outboxPublished.increment(); }
+    public void recordOutboxDeadLettered() { outboxDeadLettered.increment(); }
     public void setOutboxBacklog(int size) { outboxBacklog.set(size); }
     public Timer.Sample startCommandTimer() { return Timer.start(); }
     public void stopCommandTimer(Timer.Sample sample) { sample.stop(commandLatency); }
