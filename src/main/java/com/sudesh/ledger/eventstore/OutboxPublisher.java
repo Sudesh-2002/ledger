@@ -37,7 +37,7 @@ public class OutboxPublisher {
     @Scheduled(fixedDelay = 500)
     @Transactional
     public void publishPending() {
-        List<OutboxEntry> batch = outboxRepository.findTop100ByPublishedFalseOrderByIdAsc();
+        List<OutboxEntry> batch = outboxRepository.findTop100ByPublishedFalseAndDeadLetteredFalseOrderByIdAsc();
         if (batch.isEmpty()) return;
 
         for (OutboxEntry entry : batch) {
@@ -51,7 +51,7 @@ public class OutboxPublisher {
             } catch (CallNotPermittedException e) {
                 // circuit is OPEN — Kafka is unhealthy; stop this batch entirely,
                 // the backlog metric will show it and the next poll tries again later
-                metrics.setOutboxBacklog(outboxRepository.findTop100ByPublishedFalseOrderByIdAsc().size());
+                metrics.setOutboxBacklog(outboxRepository.findTop100ByPublishedFalseAndDeadLetteredFalseOrderByIdAsc().size());
                 return;
             } catch (Exception e) {
                 entry.incrementRetryCount();
@@ -63,7 +63,7 @@ public class OutboxPublisher {
         }
 
         outboxRepository.saveAll(batch);
-        metrics.setOutboxBacklog(outboxRepository.findTop100ByPublishedFalseOrderByIdAsc().size());
+        metrics.setOutboxBacklog(outboxRepository.findTop100ByPublishedFalseAndDeadLetteredFalseOrderByIdAsc().size());
     }
 
     private void publish(OutboxEntry entry) {
