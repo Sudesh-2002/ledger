@@ -5,7 +5,6 @@ import com.sudesh.ledger.eventstore.EventStoreRepository;
 import com.sudesh.ledger.eventstore.StoredEvent;
 import com.sudesh.ledger.query.repository.AccountSummaryRepository;
 import com.sudesh.ledger.query.repository.TransactionHistoryRepository;
-import com.sudesh.ledger.shared.event.DomainEventEnvelope;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,9 +36,8 @@ public class AccountProjectionRebuildService {
 
         for (StoredEvent stored : eventStoreRepository.findAllByOrderByAggregateIdAscSequenceNumberAsc()) {
             Object domainEvent = codec.toDomainEvent(stored);
-            DomainEventEnvelope envelope = new DomainEventEnvelope(
-                    stored.getAggregateId(), stored.getSequenceNumber(), domainEvent);
-            projector.apply(envelope);
+            projector.apply(new AccountProjectorEnvelope(
+                    stored.getAggregateId(), stored.getSequenceNumber(), domainEvent));
         }
     }
 }

@@ -1,5 +1,6 @@
 package com.sudesh.ledger.query.projection;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sudesh.ledger.command.domain.event.AccountOpened;
 import com.sudesh.ledger.command.domain.event.MoneyDeposited;
 import com.sudesh.ledger.command.domain.event.MoneyWithdrawn;
@@ -15,21 +16,37 @@ public class AccountProjector {
 
     private final AccountSummaryRepository summaryRepository;
     private final TransactionHistoryRepository historyRepository;
+    private final ObjectMapper objectMapper;
 
     public AccountProjector(AccountSummaryRepository summaryRepository,
-                             TransactionHistoryRepository historyRepository) {
+                             TransactionHistoryRepository historyRepository,
+                             ObjectMapper objectMapper) {
         this.summaryRepository = summaryRepository;
         this.historyRepository = historyRepository;
+        this.objectMapper = objectMapper;
     }
 
+    /** Called by Spring's in-process event bus (kept for flexibility). */
     @EventListener
     @Transactional
     public void on(DomainEventEnvelope envelope) {
-        apply(envelope);
+        try {
+            Class<?> type = switch (envelope.eventType()) {
+                case "AccountOpened" -> AccountOpened.class;
+                case "MoneyDeposited" -> MoneyDeposited.class;
+                case "MoneyWithdrawn" -> MoneyWithdrawn.class;
+                default -> null;
+            };
+            if (type == null) return;
+            Object domainEvent = objectMapper.readValue(envelope.payloadJson(), type);
+            apply(new AccountProjectorEnvelope(envelope.aggregateId(), envelope.sequenceNumber(), domainEvent));
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to deserialize event in @EventListener", e);
+        }
     }
 
-    // Shared by both the live listener and the rebuild service (Step 4b below)
-    void apply(DomainEventEnvelope envelope) {
+    // Shared by both the live Kafka consumer and the rebuild service
+    void apply(AccountProjectorEnvelope envelope) {
         switch (envelope.payload()) {
             case AccountOpened e -> handleOpened(envelope, e);
             case MoneyDeposited e -> handleDeposit(envelope, e);
@@ -38,7 +55,7 @@ public class AccountProjector {
         }
     }
 
-    private void handleOpened(DomainEventEnvelope envelope, AccountOpened e) {
+    private void handleOpened(AccountProjectorEnvelope envelope, AccountOpened e) {
         if (summaryRepository.existsById(e.accountId())) return; // idempotent
 
         summaryRepository.save(new AccountSummaryProjection(
@@ -48,7 +65,7 @@ public class AccountProjector {
                 e.accountId(), "OPEN", e.openingBalance(), "account-opened", e.openingBalance()));
     }
 
-    private void handleDeposit(DomainEventEnvelope envelope, MoneyDeposited e) {
+    private void handleDeposit(AccountProjectorEnvelope envelope, MoneyDeposited e) {
         AccountSummaryProjection summary = summaryRepository.findById(e.accountId())
                 .orElseThrow(() -> new IllegalStateException("Projection missing for " + e.accountId()));
         if (summary.getVersion() >= envelope.sequenceNumber()) return; // already applied
@@ -61,7 +78,7 @@ public class AccountProjector {
                 e.accountId(), "DEPOSIT", e.amount(), e.reference(), summary.getBalance()));
     }
 
-    private void handleWithdraw(DomainEventEnvelope envelope, MoneyWithdrawn e) {
+    private void handleWithdraw(AccountProjectorEnvelope envelope, MoneyWithdrawn e) {
         AccountSummaryProjection summary = summaryRepository.findById(e.accountId())
                 .orElseThrow(() -> new IllegalStateException("Projection missing for " + e.accountId()));
         if (summary.getVersion() >= envelope.sequenceNumber()) return;

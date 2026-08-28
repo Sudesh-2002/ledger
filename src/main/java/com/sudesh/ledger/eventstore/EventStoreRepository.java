@@ -7,6 +7,8 @@ public interface EventStoreRepository extends JpaRepository<StoredEvent, Long> {
 
     List<StoredEvent> findByAggregateIdOrderBySequenceNumberAsc(String aggregateId);
     List<StoredEvent> findAllByOrderByAggregateIdAscSequenceNumberAsc();
+    List<StoredEvent> findByAggregateIdAndSequenceNumberGreaterThanOrderBySequenceNumberAsc(
+            String aggregateId, long sequenceNumber);
 
     long countByAggregateId(String aggregateId);
 }
